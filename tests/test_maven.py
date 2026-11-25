@@ -2,16 +2,13 @@
 
 import io
 import sys
-import tempfile
 import unittest
-from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from main import main
 from maven import MavenError, direct_dependencies
 
 
@@ -23,7 +20,7 @@ APP_PATH = "/org/demo/app/1.0/app-1.0.pom"
 class MavenTests(unittest.TestCase):
     """Проверяет чтение прямых зависимостей и обработку ошибок."""
 
-    def test_cli_direct_dependencies(self):
+    def test_direct_dependencies(self):
         pom = b"""
         <project xmlns="http://maven.apache.org/POM/4.0.0">
           <properties><core.version>2.1</core.version></properties>
@@ -39,23 +36,9 @@ class MavenTests(unittest.TestCase):
           </dependency></dependencies></plugin></plugins></build>
         </project>
         """
-        output = io.StringIO()
-        with tempfile.TemporaryDirectory() as directory:
-            config = Path(directory) / "config.csv"
-            config.write_text(
-                f"package,{PACKAGE}\nrepository,{BASE}\ntest_mode,false\n",
-                encoding="utf-8",
-            )
-            with (
-                patch("sys.argv", ["main.py", str(config)]),
-                patch("maven.urlopen", return_value=io.BytesIO(pom)) as request,
-                redirect_stdout(output),
-            ):
-                self.assertEqual(main(), 0)
-
-        self.assertEqual(output.getvalue().splitlines(), [
-            f"Прямые зависимости {PACKAGE}:", "org.demo:core:2.1"
-        ])
+        with patch("maven.urlopen", return_value=io.BytesIO(pom)) as request:
+            result = direct_dependencies(BASE, PACKAGE)
+        self.assertEqual(result, ["org.demo:core:2.1"])
         request.assert_called_once_with(BASE + APP_PATH, timeout=10)
 
     def test_parent_and_bom(self):

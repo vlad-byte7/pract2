@@ -13,6 +13,8 @@ from config import MAVEN_PACKAGE
 PROPERTY = re.compile(r"\$\{([^{}]+)\}")
 MANAGED = "{*}dependencyManagement/{*}dependencies/{*}dependency"
 DIRECT = "{*}dependencies/{*}dependency"
+MANAGED_FIELDS = ("version", "scope", "optional")
+RUNTIME_SCOPES = ("compile", "runtime")
 HTTP_TIMEOUT = 10
 
 
@@ -123,17 +125,28 @@ def managed_dependencies(pom, repository, properties, parent, stack, cache):
 
     for package in imports:
         model = read_model(repository, package, stack, cache)
-        for key, node in model.managed.items():
-            version = managed_version(node, model.properties)
-            managed.setdefault(key, version)
+        for key, entry in model.managed.items():
+            settings = {
+                name: managed_value(entry, name, model.properties)
+                for name in MANAGED_FIELDS
+            }
+            managed.setdefault(key, settings)
     return managed
 
 
-def managed_version(entry, properties):
-    """Берёт версию из объявления или из уже обработанного BOM."""
-    if isinstance(entry, str):
-        return entry
-    return interpolate(value_of(entry, "version"), properties)
+def managed_value(entry, name, properties):
+    """Берёт значение из объявления или из уже обработанного BOM."""
+    if isinstance(entry, dict):
+        return entry[name]
+    return interpolate(value_of(entry, name), properties)
+
+
+def dependency_value(node, model, key, name):
+    """Использует управляемое значение, если оно отсутствует в зависимости."""
+    value = interpolate(value_of(node, name), model.properties)
+    if not value and key in model.managed:
+        return managed_value(model.managed[key], name, model.properties)
+    return value
 
 
 def read_model(repository, package, stack, cache):
@@ -160,12 +173,9 @@ def read_model(repository, package, stack, cache):
     return model
 
 
-def dependency_coordinate(node, model):
+def dependency_coordinate(node, model, key):
     """Собирает координаты прямой зависимости и разрешает её версию."""
-    key = dependency_key(node, model.properties)
-    version = interpolate(value_of(node, "version"), model.properties)
-    if not version and key in model.managed:
-        version = managed_version(model.managed[key], model.properties)
+    version = dependency_value(node, model, key, "version")
     package = ":".join(key[:2])
     if not version or PROPERTY.search(version):
         raise MavenError(f"не удалось определить версию зависимости {package}")
@@ -176,6 +186,18 @@ def direct_dependencies(repository, package):
     """Возвращает координаты прямых зависимостей выбранного пакета."""
     model = read_model(repository, package, (), {})
     return [
-        dependency_coordinate(node, model)
-        for node in model.dependencies.values()
+        dependency_coordinate(node, model, key)
+        for key, node in model.dependencies.items()
     ]
+
+
+def runtime_dependencies(repository, package, cache):
+    """Выбирает обязательные зависимости с областью compile или runtime."""
+    model = read_model(repository, package, (), cache)
+    dependencies = []
+    for key, node in model.dependencies.items():
+        scope = dependency_value(node, model, key, "scope") or "compile"
+        optional = dependency_value(node, model, key, "optional")
+        if scope in RUNTIME_SCOPES and optional.lower() != "true":
+            dependencies.append(dependency_coordinate(node, model, key))
+    return dependencies

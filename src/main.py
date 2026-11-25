@@ -13,6 +13,7 @@ from graph import (
     load_test_repository,
 )
 from maven import MavenError, runtime_dependencies
+from visualization import render_d2
 
 
 def load_graph(config_path):
@@ -32,20 +33,26 @@ def load_graph(config_path):
 
 
 def main():
-    """Читает настройки и выводит граф или порядок загрузки."""
+    """Читает настройки и выводит выбранное представление графа."""
     parser = argparse.ArgumentParser(description="Анализ зависимостей Maven")
     default_config = Path(__file__).resolve().parents[1] / "config.csv"
     parser.add_argument("config", type=Path, nargs="?", default=default_config)
-    parser.add_argument(
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument(
         "--load-order",
         action="store_true",
         help="вывести порядок загрузки зависимостей",
+    )
+    output.add_argument(
+        "--d2", action="store_true", help="вывести текст диаграммы D2"
     )
     args = parser.parse_args()
 
     try:
         graph = load_graph(args.config)
-        if args.load_order:
+        if args.d2:
+            print(render_d2(graph))
+        elif args.load_order:
             print_load_order(graph)
         else:
             print_graph(graph)

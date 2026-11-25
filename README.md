@@ -117,6 +117,55 @@ mvn -o -f .\examples\maven\pom.xml validate
 В Maven ему соответствует порядок сборки модулей. Порядок загрузки файлов
 в отдельном запуске зависит от обхода графа, кэша и числа потоков.
 
+## Визуализация на D2
+
+Флаг `--d2` выводит в консоль только текст диаграммы. Стрелка идёт от пакета
+к его зависимости. Каждому пакету присваивается идентификатор `pkg1`, `pkg2`
+и так далее, а его имя используется как подпись. Это позволяет отобразить
+полные координаты Maven, одиночные пакеты и циклы.
+
+| Пакет | Команда в PowerShell | Готовая диаграмма |
+| --- | --- | --- |
+| `A` | `.\run.bat .\examples\branching.csv --d2` | [Разветвлённый граф](https://kroki.io/d2/svg/eNpLySxKTS7JzM-zUkjJL8_j5eLlKshON7RSUHJUAjONgEwnCNMYyHSGME2ATBcI01BB104BpBCFZwzRDOWZQPQjeABZ9x5e) |
+| `B` | `.\run.bat .\examples\subtree.csv --d2` | [Одна зависимость](https://kroki.io/d2/svg/eNpLySxKTS7JzM-zUkjJL8_j5eLlKshON7RSUHJSAjONgEwXCNNQQddOASTEywUAwnMOgg==) |
+| `D` | `.\run.bat .\examples\leaf.csv --d2` | [Пакет без зависимостей](https://kroki.io/d2/svg/eNpLySxKTS7JzM-zUkjJL8_j5eLlKshON7RSUHJR4uUCAJvzCG4=) |
+
+Готовые диаграммы отрисованы D2 через Kroki. С установленным D2 можно
+построить SVG локально. Для пакетов Maven запустите с обычным `config.csv`.
+
+```powershell
+.\run.bat .\examples\branching.csv --d2 | Set-Content .\graph.d2 -Encoding ascii
+d2 .\graph.d2 .\graph.svg
+```
+
+### Сравнение с Maven
+
+Для сравнения буквы `A`, `B`, `D` соответствуют локальным Maven-пакетам
+`org.variant19.demo:a:1.0`, `org.variant19.demo:b:1.0` и
+`org.variant19.demo:d:1.0` из `examples/maven`. Результаты получены
+с помощью Maven Resolver 1.9.22 из Maven 3.9.9.
+
+| Пакет | Граф D2 | Дерево Maven Resolver |
+| --- | --- | --- |
+| `A` | `A → B`, `A → C`, `B → D`, `C → D` | `A → B`, `A → C`, `B → D` |
+| `B` | `B → D` | `B → D` |
+| `D` | Один узел | Один узел |
+
+Список уникальных пакетов совпал во всех трёх примерах. При построении
+дерева Maven Resolver убрал повторную зависимость `D` из ветки `C`.
+В нашем графе узел `D` один, но каждая объявленная связь видна. Подробнее
+о [графе Maven Resolver](https://maven.apache.org/resolver/dependency-graph.html).
+
+Чтобы получить DOT штатной командой Maven, сначала установите тестовые
+модули в локальный репозиторий. Для первой загрузки плагинов нужен интернет.
+
+```powershell
+mvn -f .\examples\maven\pom.xml install
+foreach ($module in @('a', 'b', 'd')) {
+    mvn -f ".\examples\maven\$module\pom.xml" dependency:tree '-DoutputType=dot' '-DoutputFile=target/tree.dot'
+}
+```
+
 ## Демонстрация обработки ошибок
 
 Перед каждым запуском поменяйте одну строку в исходном `config.csv`:
@@ -143,3 +192,4 @@ mvn -o -f .\examples\maven\pom.xml validate
 - `read_model` собирает объявления проекта и учитывает родительские POM и BOM.
 - `direct_dependencies` возвращает список координат прямых зависимостей.
 - `runtime_dependencies` выбирает зависимости для графа Maven.
+- `render_d2` преобразует список смежности в текст диаграммы D2.

@@ -61,6 +61,31 @@ class GraphTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.splitlines(), lines)
 
+    def test_cli_load_order(self):
+        cases = {
+            "branching": (0, "D -> B -> C"),
+            "cycle": (1, "граф содержит цикл"),
+            "isolated": (0, "Нет зависимостей."),
+        }
+        for name, (exit_code, message) in cases.items():
+            with self.subTest(name=name):
+                config = ROOT / "examples" / f"{name}.csv"
+                result = subprocess.run(
+                    [
+                        sys.executable, "-X", "utf8", str(ROOT / "src/main.py"),
+                        str(config), "--load-order",
+                    ],
+                    capture_output=True,
+                    encoding="utf-8",
+                    check=False,
+                )
+                self.assertEqual(result.returncode, exit_code, result.stderr)
+                if exit_code:
+                    self.assertEqual(result.stdout, "")
+                    self.assertIn(message, result.stderr)
+                else:
+                    self.assertEqual(result.stdout.splitlines()[-1], message)
+
     def test_maven_runtime_graph(self):
         root = "org.apache.commons:commons-text:1.11.0"
         core = "org.demo:core:2"

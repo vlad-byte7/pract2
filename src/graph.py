@@ -7,7 +7,7 @@ from config import TEST_PACKAGE
 
 
 class GraphError(ValueError):
-    """Сообщает об ошибке в описании тестового репозитория."""
+    """Сообщает об ошибке чтения или обработки графа."""
 
 
 def build_graph(package, dependencies_of):
@@ -26,6 +26,30 @@ def build_graph(package, dependencies_of):
                 queue.append(dependency)
 
     return graph
+
+
+def dependency_load_order(graph):
+    """Сортирует пакеты так, чтобы зависимости шли перед потребителями."""
+    remaining = {package: len(deps) for package, deps in graph.items()}
+    consumers = {package: [] for package in graph}
+    for package, dependencies in graph.items():
+        for dependency in dependencies:
+            consumers[dependency].append(package)
+
+    ready = deque(package for package in graph if not remaining[package])
+    order = []
+    while ready:
+        package = ready.popleft()
+        order.append(package)
+        for consumer in consumers[package]:
+            remaining[consumer] -= 1
+            if not remaining[consumer]:
+                ready.append(consumer)
+
+    if len(order) != len(graph):
+        blocked = ", ".join(package for package in graph if remaining[package])
+        raise GraphError(f"граф содержит цикл, заблокированы пакеты: {blocked}")
+    return order
 
 
 def read_test_rows(file):

@@ -1,27 +1,35 @@
-"""Console entry point for the Maven dependency visualizer."""
+"""Запускает консольную программу для анализа зависимостей Maven."""
 
 import argparse
 import sys
 from pathlib import Path
 
 from config import ConfigError, load_config
+from maven import MavenError, direct_dependencies
 
 
 def main():
-    """Print the validated CSV configuration."""
-    parser = argparse.ArgumentParser(description="Maven dependency visualizer")
+    """Читает настройки и выводит прямые зависимости пакета."""
+    parser = argparse.ArgumentParser(description="Анализ зависимостей Maven")
     default_config = Path(__file__).resolve().parents[1] / "config.csv"
     parser.add_argument("config", type=Path, nargs="?", default=default_config)
     args = parser.parse_args()
 
     try:
         config = load_config(args.config)
-    except ConfigError as error:
+        if config["test_mode"] == "true":
+            raise ConfigError("тестовый репозиторий будет поддержан на этапе 3")
+        package = config["package"]
+        dependencies = direct_dependencies(config["repository"], package)
+    except (ConfigError, MavenError) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return 1
 
-    for key, value in config.items():
-        print(f"{key} = {value}")
+    print(f"Прямые зависимости {package}:")
+    if not dependencies:
+        print("Зависимостей нет.")
+    for dependency in dependencies:
+        print(dependency)
     return 0
 
 

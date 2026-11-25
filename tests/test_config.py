@@ -1,55 +1,51 @@
-"""Check success and failure through the console entry point."""
+"""Проверки чтения CSV в обоих режимах."""
 
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
-MAIN = Path(__file__).resolve().parents[1] / "src" / "main.py"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from config import ConfigError, load_config
+
+
 VALID_PACKAGE = "org.apache.commons:commons-text:1.11.0"
 VALID_URL = "https://repo.maven.apache.org/maven2"
 
 
 class ConfigTests(unittest.TestCase):
-    """Exercise configurations in both repository modes."""
+    """Проверяет корректные значения и сообщения об ошибках."""
 
-    def run_config(self, content, fixture=False):
-        """Write a temporary config and run the program against it."""
+    def load(self, content, fixture=False):
+        """Читает конфигурацию из временного файла."""
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "config.csv"
             config.write_text(content, encoding="utf-8")
             if fixture:
                 config.with_name("graph.txt").touch()
-            return subprocess.run(
-                [sys.executable, "-X", "utf8", str(MAIN), str(config)],
-                capture_output=True,
-                encoding="utf-8",
-                check=False,
-            )
+            return load_config(config)
 
     def test_maven_mode(self):
-        result = self.run_config(
-            f"package,{VALID_PACKAGE}\nrepository,{VALID_URL}\ntest_mode,false\n"
+        result = self.load(
+            f"package,{VALID_PACKAGE}\n"
+            f"repository,{VALID_URL}\ntest_mode,false\n"
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
-            result.stdout.splitlines(),
-            [
-                f"package = {VALID_PACKAGE}",
-                f"repository = {VALID_URL}",
-                "test_mode = false",
-            ],
+            result,
+            {
+                "package": VALID_PACKAGE,
+                "repository": VALID_URL,
+                "test_mode": "false",
+            },
         )
 
     def test_local_mode(self):
-        result = self.run_config(
-            "package,A\nrepository,graph.txt\ntest_mode,true\n",
-            fixture=True,
+        result = self.load(
+            "package,A\nrepository,graph.txt\ntest_mode,true\n", fixture=True
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("repository = graph.txt", result.stdout)
+        self.assertEqual(result["repository"], "graph.txt")
+        self.assertEqual(result["test_mode"], "true")
 
     def test_invalid_settings(self):
         cases = [
@@ -61,18 +57,18 @@ class ConfigTests(unittest.TestCase):
         ]
         for package, source, mode, field in cases:
             with self.subTest(package=package, source=source, mode=mode):
-                result = self.run_config(
-                    f"package,{package}\nrepository,{source}\ntest_mode,{mode}\n"
-                )
-                self.assertEqual(result.returncode, 1)
-                self.assertIn(field, result.stderr)
+                with self.assertRaisesRegex(ConfigError, field):
+                    self.load(
+                        f"package,{package}\n"
+                        f"repository,{source}\ntest_mode,{mode}\n"
+                    )
 
     def test_missing_setting(self):
-        result = self.run_config(f"package,{VALID_PACKAGE}\ntest_mode,false\n")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("отсутствует настройка repository", result.stderr)
+        message = "отсутствует настройка repository"
+        with self.assertRaisesRegex(ConfigError, message):
+            self.load(f"package,{VALID_PACKAGE}\ntest_mode,false\n")
 
     def test_duplicate_setting(self):
-        result = self.run_config("package,A\npackage,B\n")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("настройка package указана дважды", result.stderr)
+        message = "настройка package указана дважды"
+        with self.assertRaisesRegex(ConfigError, message):
+            self.load("package,A\npackage,B\n")

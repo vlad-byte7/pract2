@@ -1,4 +1,4 @@
-"""Read and validate the application's CSV settings."""
+"""Читает и проверяет настройки программы из CSV."""
 
 import csv
 import re
@@ -12,11 +12,11 @@ TEST_PACKAGE = re.compile(r"[A-Z]")
 
 
 class ConfigError(ValueError):
-    """Report an invalid or unreadable configuration."""
+    """Сообщает об ошибке чтения или проверки настроек."""
 
 
 def read_settings(path):
-    """Read one key and value per CSV row."""
+    """Читает ключ и значение из каждой строки CSV."""
     settings = {}
     with path.open(encoding="utf-8-sig", newline="") as file:
         reader = csv.reader(file, strict=True)
@@ -24,7 +24,8 @@ def read_settings(path):
             if not row:
                 continue
             if len(row) != COLUMN_COUNT:
-                raise ConfigError(f"строка {reader.line_num}: нужно два столбца")
+                line = reader.line_num
+                raise ConfigError(f"строка {line}: нужно два столбца")
             key, value = (cell.strip() for cell in row)
             if key not in REQUIRED_KEYS:
                 raise ConfigError(f"неизвестная настройка: {key!r}")
@@ -41,7 +42,7 @@ def read_settings(path):
 
 
 def validate_url(value):
-    """Check that the repository address is an HTTP or HTTPS URL."""
+    """Проверяет адрес репозитория HTTP или HTTPS."""
     try:
         url = urlsplit(value)
         port = url.port
@@ -55,11 +56,13 @@ def validate_url(value):
         or url.netloc.endswith(":")
         or port == 0
     ):
-        raise ConfigError("repository: нужен корректный URL с http:// или https://")
+        raise ConfigError(
+            "repository: нужен корректный URL с http:// или https://"
+        )
 
 
 def validate_settings(settings, directory):
-    """Validate the package and repository for the selected mode."""
+    """Проверяет пакет и источник данных с учётом режима."""
     mode = settings["test_mode"].lower()
     if mode not in ("true", "false"):
         raise ConfigError("test_mode: допустимы только true и false")
@@ -73,14 +76,16 @@ def validate_settings(settings, directory):
             raise ConfigError(f"repository: файл не найден: {repository}")
     else:
         if not MAVEN_PACKAGE.fullmatch(package):
-            raise ConfigError("package: нужен формат groupId:artifactId:version")
+            raise ConfigError(
+                "package: нужен формат groupId:artifactId:version"
+            )
         validate_url(repository)
 
     settings["test_mode"] = mode
 
 
 def load_config(path):
-    """Return validated settings in the order used by the console."""
+    """Возвращает проверенные настройки в заданном порядке."""
     try:
         settings = read_settings(path)
         validate_settings(settings, path.parent)

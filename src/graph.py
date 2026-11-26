@@ -28,14 +28,19 @@ def build_graph(package, dependencies_of):
     return graph
 
 
-def dependency_load_order(graph):
-    """Сортирует пакеты так, чтобы зависимости шли перед потребителями."""
+def _dependency_index(graph):
+    """Считает зависимости каждого пакета и находит его потребителей."""
     remaining = {package: len(deps) for package, deps in graph.items()}
     consumers = {package: [] for package in graph}
     for package, dependencies in graph.items():
         for dependency in dependencies:
             consumers[dependency].append(package)
+    return remaining, consumers
 
+
+def dependency_load_order(graph):
+    """Сортирует пакеты так, чтобы зависимости шли перед потребителями."""
+    remaining, consumers = _dependency_index(graph)
     ready = deque(package for package in graph if not remaining[package])
     order = []
     while ready:
